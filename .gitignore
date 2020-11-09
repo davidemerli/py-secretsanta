@@ -1,0 +1,6 @@
+secret.py
+participants.csv
+avoid_matches.txt
+secretsanta/*
+.vscode/*
+__pycache__/*
