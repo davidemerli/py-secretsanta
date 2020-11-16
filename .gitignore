@@ -4,3 +4,5 @@ avoid_matches.txt
 secretsanta/*
 .vscode/*
 __pycache__/*
+graph.pickle
+secretsanta.log

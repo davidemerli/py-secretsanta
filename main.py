@@ -1,57 +1,67 @@
-import time
+from logging import DEBUG, INFO, debug, info
 from collections import defaultdict
-from secret import *
-import yagmail
-import csv
-import random as r
-import networkx as nx
 import matplotlib.pyplot as plt
+from random import shuffle
+from tqdm import tqdm
+import networkx as nx
+from secret import *
+import random as r
+import numpy as np
+import yagmail
+import logging
+import pickle
+import click
+import csv
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=INFO)
+
 
 MAX_TRIES = 1000000
 
 
 def parse_bans(participants):
+    """
+    Parses avoid_matches.txt returning a dictionary with participants as keys.
+    For every participants it is associated a list of matches to avoid.
+    Convention is:   KEY -should not send to-> VALUES
+    """
     cannot_send_to = dict()
 
     for p in participants:
         cannot_send_to[p] = {p}
 
+    def are_participants(involved):
+        return all(x in participants for x in involved)
+
+    def check_involved(involved):
+        if len(involved) != 2:
+            raise Exception('Wrong format here ->', line, f'[line {i}]')
+
+        if not are_participants(involved):
+            raise Exception('Found a name not in participants here ->', line, f'[line {i}]')
+
     with open('avoid_matches.txt') as bans:
         lines = [line.strip() for line in bans.readlines() if line.strip()]
 
         for i, line in enumerate(lines):
-            # double ban
-            if '<->' in line:
-                involved = line.split('<->')
+            splitter = '<->' if '<->' in line else '->' if '->' in line else '<-'
 
-                if len(involved) != 2:
-                    raise Exception('Wrong format here ->', line, f'[line {i}]')
+            involved = line.split(splitter)
+            check_involved(involved)
 
-                cannot_send_to[involved[0]].add(involved[1])
-                cannot_send_to[involved[1]].add(involved[0])
+            cannot_send_to[involved[0]].add(involved[1])
 
-            # single ban, first to second
-            elif '->' in line:
-                involved = line.split('->')
-
-                if len(involved) != 2:
-                    raise Exception('Wrong format here ->', line, f'[line {i}]')
-
-                cannot_send_to[involved[0]].add(involved[1])
-
-            # single ban, second to first
-            elif '<-' in line:
-                involved = line.split('<-')
-
-                if len(involved) != 2:
-                    raise Exception('Wrong format here ->', line, f'[line {i}]')
-
+            if splitter == '<-->':
                 cannot_send_to[involved[1]].add(involved[0])
 
     return cannot_send_to
 
 
 def get_participants():
+    """
+    Parses participants.csv to retrieve a dictionary with participants as keys
+    and as values another dictionary for each participants containing all valuable informations
+    """
     participants = defaultdict()
 
     with open('participants.csv') as csvfile:
@@ -64,18 +74,20 @@ def get_participants():
 
 
 def compute_extraction(participants, bans):
+    """
+    Given a list of participants and matches to avoid, naively tries to create a valid
+    list of matches to return.
+
+    With many banned combinations may take a while to find a valid set, consider changing MAX_TRIES
+    """
     deliveries = defaultdict()
 
     for try_index in range(MAX_TRIES):
         for p in participants:
-            choose_from = [other for other in participants if other not in bans[p]]
-            # need_present.remove(send_to)
+            choose_from = [
+                other for other in participants if other not in bans[p]]
 
             deliveries[p] = r.choice(choose_from)
-
-        # print('\n\n\n')
-        # for p in deliveries:
-        #     print(p, '->', deliveries[p])
 
         if len(set(deliveries.values())) == len(participants):
             return deliveries, (try_index + 1)
@@ -85,48 +97,152 @@ def compute_extraction(participants, bans):
     raise Exception(f'Could not find a viable extraction in {MAX_TRIES} tries')
 
 
-def draw_graph(vertices, edges):
+def draw_graph(vertices, edges, hide_names=True):
+    """
+    Draws the randomly chosen set of matches a graph for an easy visualization.
+    """
     g = nx.DiGraph()
+
+    vertices = list(vertices.keys())
+    shuffle(vertices)
+
+    if hide_names:
+        remap = {key: vertices.index(key) for key in vertices}
+        vertices = remap.values()
+        edges = {remap[key]: remap[value] for key, value in edges.items()}
+
     g.add_nodes_from(vertices)
-    pos = nx.spring_layout(g, k=2, iterations=20)
+
+    pos = nx.spring_layout(g, k=0.3*1/np.sqrt(len(g.nodes())), iterations=1000)
 
     options = {
         'node_color': '#ff6666',
-        'node_size': 1500,
-        'width': 2,
-        'arrowsize': 10,
+        'with_labels': True,
+        'node_size': 7000,
+        'width': 4,
+        'arrowsize': 40,
         'pos': pos,
+        'alpha': 0.8,
+        'arrowstyle': '->',
     }
 
-    for edge in edges.keys():
-        g.add_edge(edge, edges[edge])
+    g.add_edges_from(edges.items())
+
+    pickle.dump(g, open('graph.pickle', 'wb'))
+
+    info("Saved matches graph as 'graph.pickle'")
 
     nx.draw_networkx(g, **options)
     plt.draw()
     plt.show()
 
 
-participants = get_participants()
-participants_list = list(participants.keys())
+def send_test_emails(participants_dict):
+    """
+    Sends a test email to everyone, using yagmail and the account specified in 'secret.py'
+    """
+    yag = yagmail.SMTP(email_address, email_password)
 
-bans = parse_bans(participants_list)
+    for from_ in tqdm(participants_dict.keys(), desc='Sending emails', ncols=75):
 
-extraction, tries = compute_extraction(participants_list, bans)
+        from_ = participants_dict[from_]
 
-for p in extraction.keys():
-    print(f'{p} -> {extraction[p]}')
+        content = [
+            f'Hi {from_["name"]}Test! Please tell the organizer that everything is working correctly',
+            'Please check that your information is correct:',
+            f'Address: {from_["address"]}',
+            f'City: {from_["city"]}',
+            f'Province/State: {from_["province"]}',
+            f'Postal Code: {from_["postal_code"]}',
+            f'Phone: {from_["phone"]}',
+            f'Extra info: {from_["extra"]}'
+            '\n\n\n\n\n\nSent by py-secretsanta: https://github.com/davidemerli/py-secretsanta'
+        ]
 
-draw_graph(participants, extraction)
+        debug('######################################################')
+        debug(content)
+        debug('######################################################')
 
-print(f'Found in {tries} tries')
+        yag.send(to=from_['mail'],
+                 subject='[TEST] py-secretsanta',
+                 contents=content)
 
 
-# parse_bans(participants.keys())
+def send_emails(participants_dict, extraction):
+    """
+    Sends emails to everyone, using yagmail and the account specified in 'secret.py'
+    """
 
-# yag = yagmail.SMTP(email_address, email_password)
+    yag = yagmail.SMTP(email_address, email_password)
 
-# contents = [
-#     "This is the body, and here is just text http://somedomain/image.png",
-#     "You can find an audio file attached.", '/local/path/to/song.mp3'
-# ]
-# yag.send('davidecuber@gmail.com', 'Test!', contents)
+    for from_, to in tqdm(extraction.items(), desc='Sending emails', ncols=75):
+        from_ = participants_dict[from_]
+        to = participants_dict[to]
+
+        from_email = from_['mail']
+
+        content = [
+            f'<h1>Ciao {from_["name"].split(" ")[0]}!</h1>',
+            'Eccoci tornati ad una nuova edizione del Secret Santa™!',
+            f"Quest'anno, grazie al magico potere donatomi da chi ha scritto la classe random in python, dovrai fare un regalo a: {to['name']}!\n\n",
+            'Spera che i tuoi cookies ti consiglino qualcosa di decente su Amazon mentre scorri la home di Facebook :^]\n\n\n'
+            'Eccoti ti qui le informazioni necessarie per recapitare il regalo:',
+            f'Indirizzo: {to["address"]}',
+            f'Città: {to["city"]}',
+            f'Provincia: {to["province"]}',
+            f'CAP: {to["postal_code"]}',
+            f'Telefono di riferimento: {to["phone"]}',
+        ]
+
+        if to['extra']:
+            content.append(f'Extra info: {to["extra"]}')
+
+        content.append('\n\n\n\n\n\nSent by py-secretsanta: https://github.com/davidemerli/py-secretsanta')
+
+        debug(f'sent email to {from_email}')
+
+        yag.send(to=from_email,
+                 subject='Secret Santa 2020!',
+                 contents=content)
+
+
+def main():
+    # retrieve participants
+    participants_dict = get_participants()
+    # get only the keys
+    participants = list(participants_dict.keys())
+    info('Parsed participants')
+
+    # send participants their information to check that everything is ok
+    if click.confirm('Do you want to send everyone a test mail to verify everything is working?'):
+        send_test_emails(participants_dict)
+
+        info("Done! Please rerun the script once verified!")
+        return
+
+    # retrieve matches to avoid
+    bans = parse_bans(participants)
+    info('Parsed matches to avoid')
+
+    # extract matches
+    extraction, tries = compute_extraction(participants, bans)
+
+    for v, k in extraction.items():
+        debug(f'{v} -> {k}')
+
+    info(f'Considering {sum([len(k) for _, k in bans.items()])} matches to avoid, '
+         f'I found a valid combination in {tries} tries')
+
+    send_emails(participants_dict, extraction)
+
+    if click.confirm('Do you want to display the matches as a graph '
+                     '(keep in mind that this will not preserve the secretness of the event!) ?',
+                     default=False):
+
+        hide_names = click.confirm('Do you want to spoof the names as numbers?', default=True)
+
+        draw_graph(participants_dict, extraction, hide_names=hide_names)
+
+
+if __name__ == '__main__':
+    main()
