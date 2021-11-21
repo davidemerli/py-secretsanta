@@ -1,0 +1,30 @@
+# lines with '#' at the beginning are ignored.
+# 
+# use these placeholders to compose your message and they will be modified by the script.
+# 
+# $to_fullname, $to_firstname, $to_phone, $to_address, 
+# $to_province, $to_city, $to_postalcode, $to_extra
+#
+# $from_fullname, $from_firstname, $from_phone, $from_address, 
+# $from_province, $from_city, $from_postalcode, $from_extra
+#
+# You can also use html tags!
+#
+<h1>Hi $from_firstname!</h1>
+
+Welcome to Secret Santa, 2021 Edition! 
+
+I matched you guys with some magic and... you will give a present to <strong>$to_fullname</strong>!
+
+Here's the info to deliver the package:
+
+Address: $to_address
+City: $to_city
+Province: $to_province
+Postal Code: $to_postalcode
+Phone: $to_phone
+
+Extra Info: $to_extra
+
+
+For some added quirkiness, here's an idea for an awesome gift: $random_suggestion!

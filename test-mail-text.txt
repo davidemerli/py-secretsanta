@@ -1,0 +1,23 @@
+# lines with '#' at the beginning are ignored.
+# 
+# use these placeholders to compose your message and they will be modified by the script.
+# 
+# $to_fullname, $to_firstname, $to_phone, $to_address, 
+# $to_province, $to_city, $to_postalcode, $to_extra
+# $from_fullname, $from_firstname, $from_phone, $from_address, 
+# $from_province, $from_city, $from_postalcode, $from_extra
+#
+# use $random_suggestion to insert a random suggestion into the mail :)
+#
+Hi $from_fullname!
+
+This is a test! Please tell the organizer that everything is working correctly!
+
+Please check that your information is correct:
+
+Address: $from_address
+City: $from_city
+Province/State: $from_province
+Postal Code: $from_postalcode
+Phone: $from_phone
+Extra info: $from_extra

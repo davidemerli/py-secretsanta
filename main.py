@@ -2,6 +2,7 @@ from logging import DEBUG, INFO, debug, info
 from collections import defaultdict
 from random import shuffle, choice
 import matplotlib.pyplot as plt
+from string import Template
 from tqdm import tqdm
 import networkx as nx
 from secret import *
@@ -9,14 +10,23 @@ import random as r
 import numpy as np
 import yagmail
 import logging
+import dotenv
 import pickle
 import click
 import csv
-
-logging.basicConfig(format="%(levelname)s:%(message)s", level=DEBUG)
-
+import os
 
 MAX_TRIES = 1000000
+
+logging.basicConfig(format="%(levelname)s:%(message)s", level=INFO)
+
+dotenv.load_dotenv()
+
+AUTHOR_MAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+AUTHOR_MAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
+with open("suggestions.txt") as f:
+    SUGGESTIONS = [line.strip() for line in f.readlines() if line.strip()]
 
 
 def parse_bans(participants):
@@ -145,59 +155,55 @@ def send_test_emails(participants_dict):
     """
     yag = yagmail.SMTP(email_address, email_password)
 
-    for from_ in tqdm(participants_dict.keys(), desc="Sending emails", ncols=75):
-
+    for from_ in tqdm(participants_dict.keys(), desc="Sending test emails", ncols=75):
         from_ = participants_dict[from_]
 
-        content = [
-            f'Hi {from_["name"]},',
-            "Test! Please tell the organizer that everything is working correctly",
-            "Please check that your information is correct:",
-            f'Address: {from_["address"]}',
-            f'City: {from_["city"]}',
-            f'Province/State: {from_["province"]}',
-            f'Postal Code: {from_["postal_code"]}',
-            f'Phone: {from_["phone"]}',
-            f'Extra info: {from_["extra"]}'
-            "\n\n\n\n\n\nSent by py-secretsanta: https://github.com/davidemerli/py-secretsanta",
-        ]
+        content = read_template_file("test-mail-text.txt", from_, defaultdict(str))
+        content += "\n\n\n\n\n\nSent by py-secretsanta: https://github.com/davidemerli/py-secretsanta"
 
-        debug("######################################################")
+        debug("#####################################################")
         debug(content)
-        debug("######################################################")
+        debug("#####################################################")
 
         yag.send(to=from_["mail"], subject="[TEST] py-secretsanta", contents=content)
 
 
-suggestions = [
-    "Libro personale sulla sua vita",
-    "Mini Serra Led per orto urbano",
-    "Mappa del cielo personalizzata",
-    "Massaggiatore per piedi",
-    "Alveare a distanza e il suo miele",
-    "Tazza intelligente Ember",
-    "Top 100 film da grattare",
-    "Luce musicale Spotify",
-    "Tavola per scongelare",
-    "Set regalo tè che fiorisce nella teiera",
-    "Carta da regalo per il prossimo secret santa",
-    "Asciugamano super tecnologico",
-    "Porta posate Pupazzo di neve",
-    "Maggiordomo da divano",
-    "Grembiule spiritoso",
-    "Cestini di Natale",
-    "Abiti per bottiglie",
-    "Zerbino personalizzato",
-    "Ceppo Porta Coltelli di design",
-    "Scarpe da scoglio",
-    "Zaino fotografico",
-    "Cuscino Biscotto",
-]
+def find_replacements(to, from_):
+    return {
+        "to_fullname": to["name"],
+        "to_firstname": to["name"].split(" ")[0],
+        "to_phone": to["phone"],
+        "to_address": to["address"],
+        "to_province": to["province"],
+        "to_city": to["city"],
+        "to_postalcode": to["postal_code"],
+        "to_extra": to["extra"],
+        "from_fullname": from_["name"],
+        "from_firstname": from_["name"].split(" ")[0],
+        "from_phone": from_["phone"],
+        "from_address": from_["address"],
+        "from_province": from_["province"],
+        "from_city": from_["city"],
+        "from_postalcode": from_["postal_code"],
+        "from_extra": from_["extra"],
+        "random_suggestion": choice(SUGGESTIONS),
+    }
+
+
+def read_template_file(filename, from_, to):
+    with open(filename) as f:
+        # ignore comments
+        text = [
+            line for line in f.readlines() if not line.strip() or line.strip()[0] != "#"
+        ]
+
+        src = Template("".join(text))
+        return src.substitute(find_replacements(to, from_))
 
 
 def send_emails(participants_dict, extraction):
     """
-    Sends emails to everyone, using yagmail and the account specified in 'secret.py'
+    Sends emails to everyone, using yagmail and the account specified in .env
     """
 
     yag = yagmail.SMTP(email_address, email_password)
@@ -206,32 +212,10 @@ def send_emails(participants_dict, extraction):
         from_ = participants_dict[from_]
         to = participants_dict[to]
 
+        content = read_template_file("mail-text.txt", from_, to)
+        content += "\n\n\n\n\n\nSent by py-secretsanta: https://github.com/davidemerli/py-secretsanta"
+
         from_email = from_["mail"]
-
-        content = [
-            f'<h1>Ciao {from_["name"].split(" ")[0]}!</h1>',
-            "BBBBBBBenvenuti all'edizione del Secret Santa™ 2021!",
-            f"Questa volta grazie al potere del machine learning blockchain self-hosted, dovrai fare un regalo a...",
-            f"<h5>{to['name']}!<h5>\n\n",
-            "\n\n\n"
-            "Eccoti ti qui le informazioni necessarie per recapitare il regalo:",
-            f'Indirizzo: {to["address"]}',
-            f'Città: {to["city"]}',
-            f'Provincia: {to["province"]}',
-            f'CAP: {to["postal_code"]}',
-            f'Telefono di riferimento: {to["phone"]}',
-        ]
-
-        if to["extra"]:
-            content.append(f'Extra info: {to["extra"]}')
-
-        content.append(
-            f"\n\n Suggerimento random offerto da regalitop.it: \n{choice(suggestions)} \n\n"
-        )
-
-        content.append(
-            "\n\n\n\n\n\nSent by py-secretsanta: https://github.com/davidemerli/py-secretsanta"
-        )
 
         debug(f"sent email to {from_email}")
         debug(content)
