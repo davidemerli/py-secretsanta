@@ -45,6 +45,8 @@ If you use a google account, make sure you enable untrusted apps:
 Go to: `https://www.google.com/settings/security/lesssecureapps` while logged in.
 Then enable it with the switch button.
 
+You need to put your credentials in the `.env` file
+
 ## Template email
 
 You can personalize the emails by editing `mail-text.txt` file.
