@@ -6,3 +6,6 @@ secretsanta/*
 __pycache__/*
 graph.pickle
 secretsanta.log
+secret.py
+participants.csv
+avoid_matches.txt
