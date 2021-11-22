@@ -153,7 +153,7 @@ def send_test_emails(participants_dict):
     """
     Sends a test email to everyone, using yagmail and the account specified in 'secret.py'
     """
-    yag = yagmail.SMTP(email_address, email_password)
+    yag = yagmail.SMTP(AUTHOR_MAIL_ADDRESS, AUTHOR_MAIL_PASSWORD)
 
     for from_ in tqdm(participants_dict.keys(), desc="Sending test emails", ncols=75):
         from_ = participants_dict[from_]
@@ -206,7 +206,7 @@ def send_emails(participants_dict, extraction):
     Sends emails to everyone, using yagmail and the account specified in .env
     """
 
-    yag = yagmail.SMTP(email_address, email_password)
+    yag = yagmail.SMTP(AUTHOR_MAIL_ADDRESS, AUTHOR_MAIL_PASSWORD)
 
     for from_, to in tqdm(extraction.items(), desc="Sending emails", ncols=75):
         from_ = participants_dict[from_]
